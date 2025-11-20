@@ -1,7 +1,8 @@
 section .text
-    global vec_add_asm, vec_mul_asm, vec_dot_asm
+    global vec_dot_asm, vec_add_asm, vec_mul_asm
     global relu_asm, relu_derivative_asm
-    global sigmoid_asm, sigmoid_derivative_asm
+    global sigmoid_asm, sigmoid_derivative_asm  
+    global tanh_asm, tanh_derivative_asm
 
 ; void vec_add_asm(float* a, float* b, float* result, size_t len)
 ; rdi = a, rsi = b, rdx = result, rcx = len

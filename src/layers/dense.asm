@@ -302,10 +302,11 @@ apply_activation_derivative:
     ; В этой упрощенной версии предполагаем, что тип активации известен
     ; В реальной реализации нужно передавать тип активации как параметр
     
-    ; Для демонстрации используем ReLU derivative
-    mov rdi, rsi         ; output
-    mov rsi, rdi         ; doutput (будет модифицирован)
-    mov rdx, rcx         ; len
+    ; rdi = doutput, rsi = output, rdx = result, rcx = len
+    ; Для упрощения всегда используем ReLU derivative
+    mov rdi, rsi         ; output (первый параметр для relu_derivative)
+    mov rsi, rdi         ; doutput (второй параметр) 
+    mov rdx, rcx         ; len (третий параметр)
     call relu_derivative_asm
     ret
 

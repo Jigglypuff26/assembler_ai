@@ -289,3 +289,48 @@ matrix_transpose_asm:
     pop r14
     pop r15
     ret
+
+; Внешнее произведение векторов
+; void outer_product(float* a, float* b, float* result, size_t rows, size_t cols)
+; result[rows][cols] = a * b^T
+outer_product:
+    push r15
+    push r14
+    
+    mov r15, rdi  ; a
+    mov r14, rsi  ; b
+    
+    xor r10, r10  ; i = 0
+.outer_loop:
+    cmp r10, rcx
+    jge .end_outer
+    
+    xor r11, r11  ; j = 0
+.inner_loop:
+    cmp r11, r9
+    jge .end_inner
+    
+    ; result[i][j] = a[i] * b[j]
+    vmovss xmm0, [r15]        ; a[i]
+    vmovss xmm1, [r14 + r11*4] ; b[j]
+    vmulss xmm2, xmm0, xmm1
+    
+    ; Вычисляем индекс: i * cols + j
+    mov rax, r10
+    mul r9
+    add rax, r11
+    shl rax, 2
+    vmovss [rdx + rax], xmm2
+    
+    inc r11
+    jmp .inner_loop
+
+.end_inner:
+    add r15, 4  ; следующий элемент a
+    inc r10
+    jmp .outer_loop
+
+.end_outer:
+    pop r14
+    pop r15
+    ret
