@@ -15,6 +15,7 @@
 %define ACTIVATION_RELU    0
 %define ACTIVATION_SIGMOID 1
 %define ACTIVATION_TANH    2
+%define ACTIVATION_NONE    3
 
 ; Флаги оптимизаторов
 %define OPTIM_SGD         0

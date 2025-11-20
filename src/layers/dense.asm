@@ -496,37 +496,38 @@ dense_layer_free:
 ; Упрощенное матричное умножение для векторов
 ; void matrix_multiply_simple(float* A, float* B, float* C, size_t rows, size_t cols)
 ; A[rows][cols] * B[cols] = C[rows]
-matrix_multiply_simple:
+matrix_multiply_transpose:
+    ; A[colsA][rows]^T * B[colsB] = C[rows]
     push r15
     push r14
+    push r13
     
     mov r15, rdi  ; A
     mov r14, rsi  ; B
+    mov r13, rdx  ; C
     
     xor r10, r10  ; i = 0
 .rows_loop:
     cmp r10, rcx
     jge .end_rows
     
-    ; Вычисляем C[i] = dot(A[i], B)
-    mov rdi, r15  ; &A[i][0]
+    ; C[i] = dot(A[:,i], B) - но A хранится транспонированно
+    mov rdi, r15  ; A[0][i]
     mov rsi, r14  ; B
-    mov rdx, r8   ; cols
+    mov rdx, r8   ; colsA (длина)
     call vec_dot_asm
     
-    ; Сохраняем результат в C[i]
-    mov [rdx], eax
-    add rdx, 4
+    ; Сохраняем результат
+    mov [r13 + r10*4], eax
     
-    ; Переходим к следующей строке A
-    mov rax, r8
-    shl rax, 2
-    add r15, rax
+    ; Переходим к следующему столбцу в A (транспонированный доступ)
+    add r15, 4    ; следующий элемент в столбце
     
     inc r10
     jmp .rows_loop
 
 .end_rows:
+    pop r13
     pop r14
     pop r15
     ret

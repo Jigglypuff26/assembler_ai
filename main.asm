@@ -37,6 +37,7 @@ section .text
     global _start
     extern dense_layer_init, dense_layer_forward, dense_layer_backward
     extern dense_layer_update, mse_loss, mse_loss_derivative
+    extern dense_layer_update, sgd_update_learning_rate
     extern malloc_asm, free_asm
 
 _start:
