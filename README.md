@@ -118,28 +118,25 @@ cd assembler_ai
 
 bash
 
-# Компиляция основных модулей
+# Компиляция всех модулей
 nasm -f elf64 src/core/memory.asm -o memory.o
-
 nasm -f elf64 src/core/math.asm -o math.o
-
 nasm -f elf64 src/core/linear.asm -o linear.o
-
 nasm -f elf64 src/layers/dense.asm -o dense.o
-
 nasm -f elf64 src/layers/activation.asm -o activation.o
-
+nasm -f elf64 src/layers/conv.asm -o conv.o
+nasm -f elf64 src/layers/pooling.asm -o pooling.o
+nasm -f elf64 src/layers/rnn.asm -o rnn.o
+nasm -f elf64 src/layers/lstm.asm -o lstm.o
 nasm -f elf64 src/loss/mse.asm -o mse.o
-
 nasm -f elf64 src/optim/sgd.asm -o sgd.o
-
+nasm -f elf64 src/optim/adam.asm -o adam.o
+nasm -f elf64 src/optim/rmsprop.asm -o rmsprop.o
+nasm -f elf64 src/utils/serialization.asm -o serialization.o
+nasm -f elf64 src/utils/im2col.asm -o im2col.o
 nasm -f elf64 main.asm -o main.o
 
-    Линковка и запуск:
-
-bash
-
-# Линковка
+### Линковка
 ld -static -o neural_net *.o
 
 # Запуск
@@ -156,14 +153,22 @@ bash
 cmd
 
 :: Компиляция
-nasm -f win64 src/core/memory.asm -o memory.obj
-nasm -f win64 src/core/math.asm -o math.obj
-nasm -f win64 src/core/linear.asm -o linear.obj
-nasm -f win64 src/layers/dense.asm -o dense.obj
-nasm -f win64 src/layers/activation.asm -o activation.obj
-nasm -f win64 src/loss/mse.asm -o mse.obj
-nasm -f win64 src/optim/sgd.asm -o sgd.obj
-nasm -f win64 main.asm -o main.obj
+nasm -f elf64 src/core/memory.asm -o memory.o
+nasm -f elf64 src/core/math.asm -o math.o
+nasm -f elf64 src/core/linear.asm -o linear.o
+nasm -f elf64 src/layers/dense.asm -o dense.o
+nasm -f elf64 src/layers/activation.asm -o activation.o
+nasm -f elf64 src/layers/conv.asm -o conv.o
+nasm -f elf64 src/layers/pooling.asm -o pooling.o
+nasm -f elf64 src/layers/rnn.asm -o rnn.o
+nasm -f elf64 src/layers/lstm.asm -o lstm.o
+nasm -f elf64 src/loss/mse.asm -o mse.o
+nasm -f elf64 src/optim/sgd.asm -o sgd.o
+nasm -f elf64 src/optim/adam.asm -o adam.o
+nasm -f elf64 src/optim/rmsprop.asm -o rmsprop.o
+nasm -f elf64 src/utils/serialization.asm -o serialization.o
+nasm -f elf64 src/utils/im2col.asm -o im2col.o
+nasm -f elf64 main.asm -o main.o
 
 :: Линковка (требуется Microsoft Linker)
 link /subsystem:console /entry:main *.obj
