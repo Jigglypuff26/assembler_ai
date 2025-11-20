@@ -83,7 +83,7 @@ sudo pacman -S nasm
 
     Дополнительно: WSL2 (рекомендуется) или MinGW
 
-Установка на Windows:
+# Установка на Windows:
 
 Вариант 1: WSL2 (рекомендуется)
 bash
@@ -111,6 +111,7 @@ sudo apt-get install nasm
 bash
 
 git clone https://github.com/Jigglypuff26/assembler_ai.git
+
 cd assembler_ai
 
     Компиляция всех модулей:
@@ -119,12 +120,19 @@ bash
 
 # Компиляция основных модулей
 nasm -f elf64 src/core/memory.asm -o memory.o
+
 nasm -f elf64 src/core/math.asm -o math.o
+
 nasm -f elf64 src/core/linear.asm -o linear.o
+
 nasm -f elf64 src/layers/dense.asm -o dense.o
+
 nasm -f elf64 src/layers/activation.asm -o activation.o
+
 nasm -f elf64 src/loss/mse.asm -o mse.o
+
 nasm -f elf64 src/optim/sgd.asm -o sgd.o
+
 nasm -f elf64 main.asm -o main.o
 
     Линковка и запуск:
