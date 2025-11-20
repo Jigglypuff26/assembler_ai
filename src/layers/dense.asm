@@ -2,6 +2,8 @@ section .data
 align 16
     ; Глобальный экземпляр оптимизатора
     optim_instance: dq 0
+    default_lr: dd 0.01
+    default_momentum: dd 0.9
 
 section .text
     global dense_layer_init, dense_layer_forward
@@ -14,21 +16,7 @@ section .text
     extern relu_asm, sigmoid_asm, tanh_asm
     extern relu_derivative_asm, sigmoid_derivative_asm, tanh_derivative_asm
     extern sgd_optimizer_init, sgd_optimizer_update, sgd_optimizer_free
-
-; Структура плотного слоя (расширенная)
-; typedef struct {
-;     float* weights;     // +0
-;     float* biases;      // +8
-;     float* input;       // +16
-;     float* output;      // +24
-;     float* dweights;    // +32
-;     float* dbiases;     // +40
-;     float* dinput;      // +48
-;     size_t input_size;  // +56
-;     size_t output_size; // +64
-;     int activation;     // +72
-;     void* optimizer;    // +80 (новое поле)
-; } DenseLayer;
+    extern sgd_update_learning_rate
 
 ; DenseLayer* dense_layer_init(size_t input_size, size_t output_size, int activation)
 ; rdi = input_size, rsi = output_size, rdx = activation
@@ -128,7 +116,6 @@ dense_layer_init:
     ret
 
 ; Инициализация весов методом Xavier/Glorot
-; void initialize_weights_xavier(float* weights, size_t size)
 initialize_weights_xavier:
     push r12
     push r13
@@ -164,8 +151,8 @@ initialize_default_optimizer:
     mov r12, rdi  ; param_size
     
     ; SGD с learning_rate = 0.01, momentum = 0.9
-    vmovss xmm0, [rel default_lr]
-    vmovss xmm1, [rel default_momentum]
+    vmovss xmm0, [default_lr]
+    vmovss xmm1, [default_momentum]
     vxorps xmm2, xmm2, xmm2  ; weight_decay = 0
     mov rdi, 0               ; nesterov = false
     mov rsi, r12             ; param_size
@@ -188,10 +175,6 @@ dense_layer_forward:
     mov [r12 + 16], rsi
     
     ; output = weights * input + biases
-    ; weights: [output_size, input_size]
-    ; input: [input_size]
-    ; output: [output_size]
-    
     mov r14, [r12 + 64]  ; output_size
     mov rdi, [r12]       ; weights
     mov rsi, r13         ; input
@@ -265,9 +248,9 @@ dense_layer_backward:
     cmp eax, ACTIVATION_NONE
     je .no_activation_derivative
     
-    ; Создаем временный буфер для производной активации
+    ; Применяем производную активации к doutput
     mov rdi, r13         ; doutput
-    mov rsi, [r12 + 24]  ; output слоя (для вычисления производной)
+    mov rsi, [r12 + 24]  ; output слоя
     mov rdx, r13         ; doutput (in-place)
     mov rcx, [r12 + 64]  ; output_size
     call apply_activation_derivative
@@ -285,8 +268,6 @@ dense_layer_backward:
     call vec_add_asm
     
     ; dweights = input * doutput^T
-    ; input: [input_size], doutput: [output_size]
-    ; dweights: [input_size, output_size]
     mov r14, [r12 + 16]  ; input
     mov r15, r13         ; doutput
     
@@ -318,50 +299,14 @@ dense_layer_backward:
 ; Применение производной функции активации
 ; void apply_activation_derivative(float* doutput, float* output, float* result, size_t len)
 apply_activation_derivative:
-    push r12
-    push r13
+    ; В этой упрощенной версии предполагаем, что тип активации известен
+    ; В реальной реализации нужно передавать тип активации как параметр
     
-    mov r12, rdi  ; doutput
-    mov r13, rsi  ; output
-    
-    ; Определяем какая функция активации используется
-    ; (в реальности это должно передаваться как параметр)
-    mov eax, ACTIVATION_RELU  ; предположим ReLU для примера
-    
-    cmp eax, ACTIVATION_RELU
-    jne .sigmoid_derivative
-    
-    ; ReLU derivative
-    mov rdi, r13         ; output
-    mov rsi, r12         ; doutput (будет модифицирован)
-    mov rdx, [r12 + 64]  ; output_size
+    ; Для демонстрации используем ReLU derivative
+    mov rdi, rsi         ; output
+    mov rsi, rdi         ; doutput (будет модифицирован)
+    mov rdx, rcx         ; len
     call relu_derivative_asm
-    jmp .end
-
-.sigmoid_derivative:
-    cmp eax, ACTIVATION_SIGMOID
-    jne .tanh_derivative
-    
-    ; Sigmoid derivative
-    mov rdi, r13
-    mov rsi, r12
-    mov rdx, [r12 + 64]
-    call sigmoid_derivative_asm
-    jmp .end
-
-.tanh_derivative:
-    cmp eax, ACTIVATION_TANH
-    jne .end
-    
-    ; Tanh derivative
-    mov rdi, r13
-    mov rsi, r12
-    mov rdx, [r12 + 64]
-    call tanh_derivative_asm
-
-.end:
-    pop r13
-    pop r12
     ret
 
 ; void dense_layer_update(DenseLayer* layer, float learning_rate)
@@ -389,7 +334,7 @@ dense_layer_update:
     mov rcx, [r12 + 80]  ; optimizer
     call sgd_optimizer_update
     
-    ; Обновляем смещения (используем базовый SGD для простоты)
+    ; Обновляем смещения (используем тот же оптимизатор)
     mov rdi, [r12 + 8]   ; biases
     mov rsi, [r12 + 40]  ; dbiases
     mov rdx, [r12 + 64]  ; output_size
@@ -397,6 +342,7 @@ dense_layer_update:
     call sgd_optimizer_update
     
     ; Очищаем градиенты для следующей итерации
+    mov rdi, r12
     call clear_gradients
     
     pop r12
@@ -492,53 +438,3 @@ dense_layer_free:
 
 .end:
     ret
-
-; Упрощенное матричное умножение для векторов
-; void matrix_multiply_simple(float* A, float* B, float* C, size_t rows, size_t cols)
-; A[rows][cols] * B[cols] = C[rows]
-matrix_multiply_transpose:
-    ; A[colsA][rows]^T * B[colsB] = C[rows]
-    push r15
-    push r14
-    push r13
-    
-    mov r15, rdi  ; A
-    mov r14, rsi  ; B
-    mov r13, rdx  ; C
-    
-    xor r10, r10  ; i = 0
-.rows_loop:
-    cmp r10, rcx
-    jge .end_rows
-    
-    ; C[i] = dot(A[:,i], B) - но A хранится транспонированно
-    mov rdi, r15  ; A[0][i]
-    mov rsi, r14  ; B
-    mov rdx, r8   ; colsA (длина)
-    call vec_dot_asm
-    
-    ; Сохраняем результат
-    mov [r13 + r10*4], eax
-    
-    ; Переходим к следующему столбцу в A (транспонированный доступ)
-    add r15, 4    ; следующий элемент в столбце
-    
-    inc r10
-    jmp .rows_loop
-
-.end_rows:
-    pop r13
-    pop r14
-    pop r15
-    ret
-
-section .data
-align 16
-default_lr: dd 0.01
-default_momentum: dd 0.9
-
-; Константы для активаций (должны быть в constants.inc)
-ACTIVATION_NONE    equ 0
-ACTIVATION_RELU    equ 1
-ACTIVATION_SIGMOID equ 2
-ACTIVATION_TANH    equ 3

@@ -1,5 +1,6 @@
 section .text
     global matrix_multiply_asm, matrix_transpose_asm
+    global matrix_multiply_simple, matrix_multiply_transpose
 
 ; void matrix_multiply_asm(float* A, float* B, float* C, 
 ;                         size_t rowsA, size_t colsA, size_t colsB)
@@ -38,21 +39,21 @@ matrix_multiply_asm:
     mov rdx, rdi
     shl rdx, 2           ; rdx = j * sizeof(float)
     
-    ; Вызываем vec_dot для вычисления скалярного произведения
+    ; Вызываем strided_dot_product для вычисления скалярного произведения
     push rdi
     push rsi
     push rcx
     push r8
     push r9
     
-    ; Подготовка параметров для vec_dot
+    ; Подготовка параметров для strided_dot_product
     mov rdi, rax         ; A[i]
     mov rsi, r13         ; B[0]
     add rsi, rdx         ; B[0][j]
     mov rdx, r8          ; длина = colsA
     mov rcx, r9          ; шаг для B = colsB
     
-    call matrix_dot_product
+    call strided_dot_product
     
     ; Сохраняем результат в C[i][j]
     ; Вычисляем индекс в C: i * colsB + j
@@ -83,10 +84,87 @@ matrix_multiply_asm:
     pop r12
     ret
 
+; Упрощенное матричное умножение для векторов
+; void matrix_multiply_simple(float* A, float* B, float* C, size_t rows, size_t cols)
+; A[rows][cols] * B[cols] = C[rows]
+matrix_multiply_simple:
+    push r15
+    push r14
+    
+    mov r15, rdi  ; A
+    mov r14, rsi  ; B
+    
+    xor r10, r10  ; i = 0
+.rows_loop:
+    cmp r10, rcx
+    jge .end_rows
+    
+    ; Вычисляем C[i] = dot(A[i], B)
+    mov rdi, r15  ; &A[i][0]
+    mov rsi, r14  ; B
+    mov rdx, r8   ; cols
+    call vec_dot_asm
+    
+    ; Сохраняем результат в C[i]
+    mov [rdx], eax
+    add rdx, 4
+    
+    ; Переходим к следующей строке A
+    mov rax, r8
+    shl rax, 2
+    add r15, rax
+    
+    inc r10
+    jmp .rows_loop
+
+.end_rows:
+    pop r14
+    pop r15
+    ret
+
+; void matrix_multiply_transpose(float* A, float* B, float* C, size_t rows, size_t colsA, size_t colsB)
+; A^T * B = C, где A[colsA][rows], B[colsB], C[rows]
+matrix_multiply_transpose:
+    push r15
+    push r14
+    push r13
+    push r12
+    
+    mov r15, rdi  ; A
+    mov r14, rsi  ; B  
+    mov r13, rdx  ; C
+    mov r12, rcx  ; rows
+    
+    xor r10, r10  ; i = 0
+.rows_loop:
+    cmp r10, r12
+    jge .end_rows
+    
+    ; C[i] = dot(A[:,i], B) - но A хранится по строкам
+    mov rdi, r15        ; A[0] + i (транспонированный доступ)
+    mov rsi, r14        ; B
+    mov rdx, r8         ; colsA (длина вектора)
+    call vec_dot_asm
+    
+    ; Сохраняем результат в C[i]
+    mov [r13 + r10*4], eax
+    
+    ; Переходим к следующей "строке" в транспонированной A
+    add r15, 4          ; следующий элемент в столбце
+    
+    inc r10
+    jmp .rows_loop
+
+.end_rows:
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+    ret
+
 ; Вспомогательная функция для скалярного произведения с шагом
-; float matrix_dot_product(float* a, float* b, size_t len, size_t stride)
-; rdi = a, rsi = b, rdx = len, rcx = stride
-matrix_dot_product:
+; float strided_dot_product(float* a, float* b, size_t len, size_t stride)
+strided_dot_product:
     test rdx, rdx
     jz .zero
     
@@ -98,7 +176,9 @@ matrix_dot_product:
     jz .process_remainder
 
 .process_8:
-    vmovups ymm0, [rdi]  ; загружаем 8 элементов из a
+    ; Загружаем 8 элементов из a (последовательно)
+    vmovups ymm0, [rdi]
+    add rdi, 32
     
     ; Загружаем 8 элементов из b с шагом
     vmovss xmm1, [rsi]
@@ -109,7 +189,7 @@ matrix_dot_product:
     lea rax, [rax + rcx]
     vmovss xmm4, [rax]
     
-    ; Собираем в один регистр (упрощенная версия)
+    ; Собираем в один регистр
     vinsertps xmm1, xmm1, xmm2, 0x10
     vinsertps xmm1, xmm1, xmm3, 0x20
     vinsertps xmm1, xmm1, xmm4, 0x30
@@ -132,7 +212,6 @@ matrix_dot_product:
     vmulps ymm0, ymm0, ymm1
     vaddps ymm7, ymm7, ymm0
     
-    add rdi, 32
     add rsi, 32
     dec r8
     jnz .process_8
@@ -165,4 +244,48 @@ matrix_dot_product:
 
 .zero:
     vxorps xmm0, xmm0, xmm0
+    ret
+
+; void matrix_transpose_asm(float* A, float* B, size_t rows, size_t cols)
+matrix_transpose_asm:
+    ; Простая реализация транспонирования
+    push r15
+    push r14
+    
+    mov r15, rdi  ; A
+    mov r14, rsi  ; B
+    
+    xor r10, r10  ; i = 0
+.outer_loop:
+    cmp r10, rcx
+    jge .end_outer
+    
+    xor r11, r11  ; j = 0
+.inner_loop:
+    cmp r11, r8
+    jge .end_inner
+    
+    ; B[j][i] = A[i][j]
+    mov rax, r10
+    mul r8
+    add rax, r11
+    shl rax, 2
+    vmovss xmm0, [r15 + rax]
+    
+    mov rax, r11
+    mul rcx
+    add rax, r10
+    shl rax, 2
+    vmovss [r14 + rax], xmm0
+    
+    inc r11
+    jmp .inner_loop
+
+.end_inner:
+    inc r10
+    jmp .outer_loop
+
+.end_outer:
+    pop r14
+    pop r15
     ret

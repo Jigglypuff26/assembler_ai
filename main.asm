@@ -37,7 +37,6 @@ section .text
     global _start
     extern dense_layer_init, dense_layer_forward, dense_layer_backward
     extern dense_layer_update, mse_loss, mse_loss_derivative
-    extern dense_layer_update, sgd_update_learning_rate
     extern malloc_asm, free_asm
 
 _start:
@@ -50,7 +49,7 @@ _start:
     
     mov rdi, 4  ; input_size
     mov rsi, 1  ; output_size
-    mov rdx, 0  ; no activation (linear output)
+    mov rdx, ACTIVATION_NONE  ; no activation (linear output)
     call dense_layer_init
     mov [layer2], rax
     
@@ -90,12 +89,13 @@ _start:
     vxorps xmm15, xmm15, xmm15  ; аккумулятор потерь
     
 .sample_loop:
-    ; Прямое распространение
+    ; Прямое распространение через первый слой
     mov rax, [layer1]
     lea rsi, [xor_inputs + r15*8]  ; input (2 float)
     mov rdi, rax
     call dense_layer_forward
     
+    ; Прямое распространение через второй слой
     mov rdi, [layer2]
     mov rsi, rax  ; выход первого слоя
     call dense_layer_forward
@@ -122,6 +122,7 @@ _start:
     call dense_layer_backward
     
     ; Backward через первый слой
+    ; dinput второго слоя становится doutput для первого
     mov rax, [layer2]
     mov rsi, [rax + 48]  ; dinput из второго слоя
     mov rdi, [layer1]
